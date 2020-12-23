@@ -98,5 +98,9 @@ io.on('connection', (socket) => {
         socket.emit('updatePersonalCal', users[findPlayerIndex(userName)].calendar)
     })
 
+    socket.on('clear', () => {
+        users = []
+    })
+
     io.emit('usersUpdate', users.length)
 })
