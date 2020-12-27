@@ -2,6 +2,7 @@ var http = require('http').createServer();
 const options = {
     cors: true,
     origins:['https://whentoscrimdemo.herokuapp.com/57799']
+    //origins:['http://localhost:3000']
 }
 
 const PORT = process.env.PORT || 8080;
@@ -33,9 +34,18 @@ const determineYDim = (start, end, jump) => {
     return count;
 }
 
-const findPlayerIndex = (name) => {
-    for (var i = 0; i < users.length; i++) {
-        if (users[i].name === name) {
+const findPlayerIndex = (roomIdx, name) => {
+    for (var i = 0; i < rooms[roomIdx].users.length; i++) {
+        if (rooms[roomIdx].users[i].name === name) {
+            return i
+        }
+    }
+    return -1
+}
+
+const findRoomIndex = (room) => {
+    for (var i = 0; i < rooms.length; i++) {
+        if (rooms[i].roomName === room) {
             return i
         }
     }
@@ -55,17 +65,16 @@ const createBlankCalendar = (start, end, jump) => {
     return ret;
 }
 
-var sharedCalendar = createBlankCalendar(start, end, jump)
+var rooms = []
 
-var users = []
-
-const updateSharedCal = () => {
-    sharedCalendar = createBlankCalendar(start, end, jump)
+const updateSharedCal = (roomIdx) => {
+    rooms[roomIdx].sharedCalendar = createBlankCalendar(start, end, jump)
+    const users = rooms[roomIdx].users
     for (var i = 0; i < users.length; i++) {
         let currCal = users[i].calendar
         for (var j = 0; j < currCal.length; j++) {
             for (var k = 0; k < currCal[j].length; k++) {
-                sharedCalendar[j][k] += currCal[j][k]
+                rooms[roomIdx].sharedCalendar[j][k] += currCal[j][k]
             }
         }
     }
@@ -74,33 +83,85 @@ const updateSharedCal = () => {
 io.on('connection', (socket) => {
     console.log("new connection!")
 
-    let currUser
+    let currUserIdx
+    let currRoomIdx
 
     socket.on('updateCalendar', (calendar) => {
+        if (currRoomIdx === undefined) return
         console.log("New Update!")
-        const user = users[findPlayerIndex(currUser)]
+        const room = rooms[currRoomIdx]
+        const user = room.users[currUserIdx]
         if (user !== undefined) {
             user.calendar = calendar
         }
-        updateSharedCal()
-        io.emit('calendarUpdate', sharedCalendar)
+        updateSharedCal(currRoomIdx)
+        io.to('' + currRoomIdx).emit('calendarUpdate', rooms[currRoomIdx].sharedCalendar)
     })
 
     socket.on('newUser', (userName) => {
-        if(findPlayerIndex(userName) === -1) {
-            users.push({
+        console.log(currRoomIdx)
+        if (currRoomIdx === undefined) return
+        let userIdx = findPlayerIndex(currRoomIdx, userName)
+        if(userIdx === -1) {
+            console.log("Creating new user!")
+            rooms[currRoomIdx].users.push({
                 name: userName,
                 calendar: createBlankCalendar(start, end, jump)
             })
-            io.emit('usersUpdate', users.length)
+            userIdx = findPlayerIndex(currRoomIdx, userName)
+            console.log(rooms[currRoomIdx].users.length)
+            io.to('' + currRoomIdx).emit('usersUpdate', rooms[currRoomIdx].users.length)
         }
-        currUser = userName
-        socket.emit('updatePersonalCal', users[findPlayerIndex(userName)].calendar)
+        currUserIdx = userIdx
+        socket.emit('updatePersonalCal', rooms[currRoomIdx].users[userIdx].calendar)
+        socket.emit('updateUsername', userName)
+        let usersList = []
+        for (let i = 0; i < rooms[currRoomIdx].users.length; i++) {
+            usersList.push(rooms[currRoomIdx].users[i].name)
+        }
+        io.to('' + currRoomIdx).emit('updateUsersList', usersList)
+    })
+
+    socket.on('newRoom', (roomName) => {
+        console.log("New Room!")
+        let roomIdx = findRoomIndex(roomName)
+        if(findRoomIndex(roomName) === -1) {
+            console.log("Creating a New Room!")
+            rooms.push({
+                roomName: roomName,
+                users: [],
+                sharedCalendar: createBlankCalendar(start, end, jump)
+            })
+            roomIdx = findRoomIndex(roomName)
+            console.log("Room idx: " + roomIdx)
+        }
+        currRoomIdx = roomIdx
+        socket.join('' + currRoomIdx)
+
+        updateSharedCal(currRoomIdx)
+        currUserIdx = undefined
+
+        io.to('' + currRoomIdx).emit('calendarUpdate', rooms[currRoomIdx].sharedCalendar)
+        io.to('' + currRoomIdx).emit('usersUpdate', rooms[currRoomIdx].users.length)
+        socket.emit('updatePersonalCal', createBlankCalendar(start, end, jump))
+        socket.emit('updateRoom', roomName)
+        socket.emit('updateUsername', '')
+        const roomNames = rooms.map((item) => {
+            return item.roomName
+        })
+        let usersList = []
+        for (let i = 0; i < rooms[currRoomIdx].users.length; i++) {
+            usersList.push(rooms[currRoomIdx].users[i].name)
+        }
+        io.emit('updateAvailableRooms', (roomNames))
+        socket.emit('updateUsersList', (usersList))
     })
 
     socket.on('clear', () => {
-        users = []
+        rooms = []
     })
-
-    io.emit('usersUpdate', users.length)
+    const roomNames = rooms.map((item) => {
+        return item.roomName
+    })
+    io.emit('updateAvailableRooms', (roomNames))
 })
