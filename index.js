@@ -129,15 +129,18 @@ io.on('connection', (socket) => {
     })
 
     socket.on('newRoom', (roomName, start, end, jump) => {
+        let startInt = parseInt(start)
+        let endInt = parseInt(end)
+        let jumpInt = parseInt(jump)
         let randomID = randomIDGenerator(rooms)
         rooms.push({
             id: randomID,
             roomName: roomName,
             users: [],
-            sharedCalendar: createBlankCalendarByParams(start, end, jump, daysOfWeekArray),
-            start: start,
-            end: end,
-            jump: jump,
+            sharedCalendar: createBlankCalendarByParams(startInt, endInt, jumpInt, daysOfWeekArray),
+            start: startInt,
+            end: endInt,
+            jump: jumpInt,
             daysOfWeekArray: [
                 "Monday",
                 "Tuesday",
