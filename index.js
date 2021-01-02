@@ -1,8 +1,8 @@
 var http = require('http').createServer();
 const options = {
     cors: true,
-    //origins:['https://whentoscrimdemo.herokuapp.com/57799']
-    origins:['http://localhost:3000']
+    origins:['https://whentoscrimdemo.herokuapp.com/57799']
+    //origins:['http://localhost:3000']
 }
 
 const PORT = process.env.PORT || 8080;
